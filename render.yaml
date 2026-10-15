@@ -1,0 +1,77 @@
+services:
+  # Web Application Service
+  - type: web
+    name: eventhub-web
+    env: python
+    region: oregon
+    plan: starter
+    buildCommand: "pip install -r requirements.txt && flask init-db"
+    startCommand: "gunicorn run:app --bind 0.0.0.0:$PORT"
+    healthCheckPath: /health
+    envVars:
+      - key: FLASK_ENV
+        value: production
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DATABASE_URL
+        fromDatabase:
+          name: eventhub-postgres
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: eventhub-redis
+          property: connectionString
+      - key: CELERY_BROKER_URL
+        fromService:
+          type: redis
+          name: eventhub-redis
+          property: connectionString
+      - key: CELERY_RESULT_BACKEND
+        fromService:
+          type: redis
+          name: eventhub-redis
+          property: connectionString
+      - key: RESERVATION_HOLD_SECONDS
+        value: "600"
+
+  # Background Celery Worker
+  - type: worker
+    name: eventhub-celery-worker
+    env: python
+    region: oregon
+    plan: starter
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "celery -A run.celery worker --loglevel=info"
+    envVars:
+      - key: FLASK_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: eventhub-postgres
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: eventhub-redis
+          property: connectionString
+      - key: CELERY_BROKER_URL
+        fromService:
+          type: redis
+          name: eventhub-redis
+          property: connectionString
+
+databases:
+  # Managed PostgreSQL Database
+  - name: eventhub-postgres
+    region: oregon
+    plan: starter
+    databaseName: eventhub_db
+    user: eventhub_admin
+
+# Managed Redis
+redis:
+  - name: eventhub-redis
+    region: oregon
+    plan: starter
+    maxmemoryPolicy: allkeys-lru
